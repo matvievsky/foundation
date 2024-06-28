@@ -19,6 +19,7 @@ const (
 type Component struct {
 	Connection *sql.DB
 
+	title       string
 	databaseURL string
 	poolSize    int
 	logger      *logrus.Entry
@@ -45,6 +46,13 @@ func WithDatabaseURL(databaseURL string) ComponentOption {
 func WithPoolSize(poolSize int) ComponentOption {
 	return func(c *Component) {
 		c.poolSize = poolSize
+	}
+}
+
+// WithCustomName sets custom name for PostgreSQL component.
+func WithCustomName(title string) ComponentOption {
+	return func(c *Component) {
+		c.title = title
 	}
 }
 
@@ -100,7 +108,11 @@ func (c *Component) Health() error {
 
 // Name implements the Component interface.
 func (c *Component) Name() string {
-	return ComponentName
+	if c.title == "" {
+		return ComponentName
+	}
+
+	return c.title
 }
 
 func NewNullTimeFromPbTimestamp(timestamp *timestamppb.Timestamp) sql.NullTime {

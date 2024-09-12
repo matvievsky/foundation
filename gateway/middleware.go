@@ -5,6 +5,8 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	fhttp "github.com/foundation-go/foundation/http"
 )
 
@@ -26,4 +28,22 @@ func IncomingHeaderMatcher(key string) (string, bool) {
 // It matches all Foundation headers and uses the default matcher for all other headers.
 func OutgoingHeaderMatcher(key string) (string, bool) {
 	return IncomingHeaderMatcher(key)
+}
+
+// GetIncomingHeaderMatcherFunc is the header matcher for the incoming custom headers.
+func GetIncomingHeaderMatcherFunc(fns ...gwruntime.HeaderMatcherFunc) gwruntime.HeaderMatcherFunc {
+	return func(key string) (string, bool) {
+		for _, fn := range fns {
+			if key, ok := fn(key); ok {
+				return key, ok
+			}
+		}
+
+		return IncomingHeaderMatcher(key)
+	}
+}
+
+// GetIncomingHeaderMatcherFunc is the header matcher for the outgoing custom headers.
+func GetOutgoingHeaderMatcherFunc(fns ...gwruntime.HeaderMatcherFunc) gwruntime.HeaderMatcherFunc {
+	return GetIncomingHeaderMatcherFunc(fns...)
 }

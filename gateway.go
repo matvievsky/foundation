@@ -52,6 +52,8 @@ type GatewayOptions struct {
 	StartComponentsOptions []StartComponentsOption
 	// CORSOptions are the options for CORS.
 	CORSOptions *gateway.CORSOptions
+	// Custom headers matchers
+	CustomHeadersMatchers []gwruntime.HeaderMatcherFunc
 }
 
 // NewGatewayOptions returns a new GatewayOptions with default values.
@@ -77,14 +79,25 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	gwruntime.DefaultContextTimeout = s.Options.Timeout
 	s.Logger.Debugf("Downstream requests timeout: %s", s.Options.Timeout)
 
+	var muxOpts = []gwruntime.ServeMuxOption{
+		gwruntime.WithIncomingHeaderMatcher(gateway.IncomingHeaderMatcher),
+		gwruntime.WithOutgoingHeaderMatcher(gateway.OutgoingHeaderMatcher),
+	}
+
+	if len(s.Options.CustomHeadersMatchers) != 0 {
+		muxOpts = []gwruntime.ServeMuxOption{
+			gwruntime.WithIncomingHeaderMatcher(
+				gateway.GetIncomingHeaderMatcherFunc(s.Options.CustomHeadersMatchers...)),
+			gwruntime.WithOutgoingHeaderMatcher(
+				gateway.GetOutgoingHeaderMatcherFunc(s.Options.CustomHeadersMatchers...)),
+		}
+	}
+
 	mux, err := gateway.RegisterServices(
 		s.Options.Services,
 		&gateway.RegisterServicesOptions{
-			MuxOpts: []gwruntime.ServeMuxOption{
-				gwruntime.WithIncomingHeaderMatcher(gateway.IncomingHeaderMatcher),
-				gwruntime.WithOutgoingHeaderMatcher(gateway.OutgoingHeaderMatcher),
-			},
-			TLSDir: s.Config.GRPC.TLSDir,
+			MuxOpts: muxOpts,
+			TLSDir:  s.Config.GRPC.TLSDir,
 		},
 	)
 	if err != nil {

@@ -107,7 +107,7 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	port := GetEnvOrInt("PORT", 51051)
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: s.ApplyMiddleware(mux, s.Options),
+		Handler: s.applyMiddleware(mux, s.Options),
 	}
 
 	s.Logger.Infof("Listening on http://0.0.0.0:%d", port)
@@ -131,7 +131,7 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) ApplyMiddleware(mux http.Handler, opts *GatewayOptions) http.Handler {
+func (s *Service) applyMiddleware(mux http.Handler, opts *GatewayOptions) http.Handler {
 	var middleware []func(http.Handler) http.Handler
 
 	// General middleware

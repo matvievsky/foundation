@@ -105,7 +105,7 @@ func (s *Service) publishEventToOutbox(ctx context.Context, event *Event, tx *sq
 		Payload: event.Payload,
 		Headers: headers,
 	}
-	// Publish event
+	// Store event
 	if err = queries.CreateOutboxEvent(ctx, params); err != nil {
 		return ferr.NewInternalError(err, "failed to insert event into outbox")
 	}

@@ -101,7 +101,8 @@ func (o *OutboxCourier) newProcessFunc(batchSize int32) func(ctx context.Context
 				Headers:   headers,
 			}
 
-			if err = o.publishEventToKafka(fctx.WithCorrelationID(ctx, headers[fkafka.HeaderCorrelationID]), event); err != nil {
+			if err = o.publishEventToKafka(fctx.WithCorrelationID(ctx, headers[fkafka.HeaderCorrelationID]),
+				addDefaultHeaders(ctx, event)); err != nil {
 				return ferr.NewInternalError(err, "failed to publish event")
 			}
 		}

@@ -193,9 +193,13 @@ func (s *Service) WithTransaction(ctx context.Context, f func(tx *sql.Tx) ([]*Ev
 
 // WithBunTransaction executes the given function in a ORM Bun transaction. If the function
 // returns an event, it will be published.
-func (s *Service) WithBunTransaction(ctx context.Context, f func(tx bun.Tx) ([]*Event, ferr.FoundationError)) ferr.FoundationError {
+func (s *Service) WithBunTransaction(ctx context.Context, f func(tx bun.Tx) ([]*Event, ferr.FoundationError), models ...any) ferr.FoundationError {
+	// Create DB sample
+	db := bun.NewDB(s.GetPostgreSQL(), pgdialect.New())
+	// Register models
+	db.RegisterModel(models)
 	// Start transaction
-	tx, err := bun.NewDB(s.GetPostgreSQL(), pgdialect.New()).BeginTx(ctx, &sql.TxOptions{})
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return ferr.NewInternalError(err, "failed to begin transaction")
 	}

@@ -197,7 +197,7 @@ func (s *Service) WithBunTransaction(ctx context.Context, f func(tx bun.Tx) ([]*
 	// Create DB sample
 	db := bun.NewDB(s.GetPostgreSQL(), pgdialect.New())
 	// Register models
-	db.RegisterModel(models)
+	db.RegisterModel(models...)
 	// Start transaction
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/foundation-go/foundation/outboxrepo"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 	"google.golang.org/protobuf/proto"
 
 	fctx "github.com/foundation-go/foundation/context"
@@ -103,7 +105,7 @@ func (s *Service) publishEventToOutbox(ctx context.Context, event *Event, tx *sq
 		Payload: event.Payload,
 		Headers: headers,
 	}
-	// Publish event
+	// Store event
 	if err = queries.CreateOutboxEvent(ctx, params); err != nil {
 		return ferr.NewInternalError(err, "failed to insert event into outbox")
 	}
@@ -173,6 +175,46 @@ func (s *Service) WithTransaction(ctx context.Context, f func(tx *sql.Tx) ([]*Ev
 	if len(events) > 0 {
 		for i, event := range events {
 			if err = s.PublishEvent(ctx, event, tx); err != nil {
+				return ferr.NewInternalError(
+					err,
+					fmt.Sprintf("failed to publish event %s: %d out of %d", event.ProtoName, i+1, len(events)),
+				)
+			}
+		}
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return ferr.NewInternalError(err, "failed to commit transaction")
+	}
+
+	return nil
+}
+
+// WithBunTransaction executes the given function in a ORM Bun transaction. If the function
+// returns an event, it will be published.
+func (s *Service) WithBunTransaction(ctx context.Context, f func(tx bun.Tx) ([]*Event, ferr.FoundationError), models ...any) ferr.FoundationError {
+	// Create DB sample
+	db := bun.NewDB(s.GetPostgreSQL(), pgdialect.New())
+	// Register models
+	db.RegisterModel(models...)
+	// Start transaction
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return ferr.NewInternalError(err, "failed to begin transaction")
+	}
+	defer tx.Rollback() // nolint: errcheck
+
+	// Execute function
+	events, fErr := f(tx)
+	if fErr != nil {
+		return fErr
+	}
+
+	// Publish events (if any)
+	if len(events) > 0 {
+		for i, event := range events {
+			if err = s.PublishEvent(ctx, event, tx.Tx); err != nil {
 				return ferr.NewInternalError(
 					err,
 					fmt.Sprintf("failed to publish event %s: %d out of %d", event.ProtoName, i+1, len(events)),

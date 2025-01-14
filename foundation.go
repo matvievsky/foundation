@@ -167,7 +167,7 @@ func NewConfig() *Config {
 			Port:    GetEnvOrInt("METRICS_PORT", 51077),
 		},
 		Outbox: &OutboxConfig{
-			Enabled: false,
+			Enabled: GetEnvOrBool("OUTBOX_ENABLED", false),
 		},
 		Redis: &RedisConfig{
 			Enabled: len(GetEnvOrString("REDIS_URL", "")) > 0,

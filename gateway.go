@@ -41,8 +41,8 @@ type GatewayOptions struct {
 	Services []*gateway.Service
 	// Timeout for downstream services requests (default: 30 seconds, if constructed with `NewGatewayOptions`)
 	Timeout time.Duration
-	// Middleware is a list of middleware to apply to the gateway. The middleware is applied in the order it is defined.
-	Middleware []Middleware
+	// Middlewares is a list of middleware to apply to the gateway. The middleware is applied in the order it is defined.
+	Middlewares []Middleware
 	// StartComponentsOptions are the options to start the components.
 	StartComponentsOptions []StartComponentsOption
 	// CORSOptions are the options for CORS.
@@ -101,7 +101,7 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 		gateway.WithCORSEnabled(s.Options.CORSOptions),
 		gateway.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token),
 		gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions)},
-		s.Options.Middleware...) {
+		s.Options.Middlewares...) {
 		mux = middleware(mux)
 		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(middleware).Pointer()).Name())
 	}

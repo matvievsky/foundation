@@ -18,7 +18,7 @@ var (
 
 func main() {
 	svc.Start(&f.GatewayOptions{
-		Services:   services,
-		Middleware: []f.Middleware{fg.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token)},
+		Services:    services,
+		Middlewares: []f.Middleware{fg.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token)},
 	})
 }

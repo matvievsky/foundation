@@ -5,6 +5,7 @@ import (
 	fg "github.com/foundation-go/foundation/gateway"
 
 	pb "github.com/foundation-go/foundation/examples/clubchat/protos/chats"
+	fhydra "github.com/foundation-go/foundation/hydra"
 )
 
 var (
@@ -17,8 +18,7 @@ var (
 
 func main() {
 	svc.Start(&f.GatewayOptions{
-		Services:                        services,
-		WithAuthentication:              true,
-		AuthenticationDetailsMiddleware: fg.WithHydraAuthenticationDetails,
+		Services:   services,
+		Middleware: []f.Middleware{fg.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token)},
 	})
 }

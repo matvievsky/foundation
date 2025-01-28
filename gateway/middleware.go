@@ -10,10 +10,10 @@ import (
 	fhttp "github.com/foundation-go/foundation/http"
 )
 
-// IncomingHeaderMatcher is the default incoming header matcher for the gateway.
+// DefaultIncomingHeaderMatcher is the default incoming header matcher for the gateway.
 //
 // It matches all Foundation headers and uses the default matcher for all other headers.
-func IncomingHeaderMatcher(key string) (string, bool) {
+func DefaultIncomingHeaderMatcher(key string) (string, bool) {
 	for _, header := range fhttp.FoundationHeaders {
 		if strings.EqualFold(header, key) {
 			return key, true
@@ -23,11 +23,11 @@ func IncomingHeaderMatcher(key string) (string, bool) {
 	return runtime.DefaultHeaderMatcher(key)
 }
 
-// OutgoingHeaderMatcher is the default outgoing header matcher for the gateway.
+// DefaultOutgoingHeaderMatcher is the default outgoing header matcher for the gateway.
 //
 // It matches all Foundation headers and uses the default matcher for all other headers.
-func OutgoingHeaderMatcher(key string) (string, bool) {
-	return IncomingHeaderMatcher(key)
+func DefaultOutgoingHeaderMatcher(key string) (string, bool) {
+	return DefaultIncomingHeaderMatcher(key)
 }
 
 // GetIncomingHeaderMatcherFunc is the header matcher for the incoming custom headers.
@@ -39,7 +39,7 @@ func GetIncomingHeaderMatcherFunc(fns ...gwruntime.HeaderMatcherFunc) gwruntime.
 			}
 		}
 
-		return IncomingHeaderMatcher(key)
+		return DefaultIncomingHeaderMatcher(key)
 	}
 }
 

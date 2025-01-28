@@ -8,7 +8,14 @@ import (
 	hydra "github.com/ory/hydra-client-go/v2"
 )
 
-func IntrospectedOAuth2Token(ctx context.Context, token string) (*hydra.IntrospectedOAuth2Token, error) {
+type Response interface {
+	GetActive() bool
+	GetClientId() string
+	GetScope() string
+	GetSub() string
+}
+
+func IntrospectedOAuth2Token(ctx context.Context, token string) (Response, error) {
 	hydraAdminURL := os.Getenv("HYDRA_ADMIN_URL")
 	if hydraAdminURL == "" {
 		return nil, errors.New("HYDRA_ADMIN_URL is not set")

@@ -41,16 +41,18 @@ type GatewayOptions struct {
 	Services []*gateway.Service
 	// Timeout for downstream services requests (default: 30 seconds, if constructed with `NewGatewayOptions`)
 	Timeout time.Duration
-	// Middlewares is a list of middleware to apply to the gateway. The middleware is applied in the order it is defined.
+	// PreMiddlewares is a list of middlewares to apply before proceeding request further (fx captcha).
+	PreMiddlewares []Middleware
+	// Middlewares is a list of middlewares to apply to the gateway. The middleware is applied in the order it is defined.
 	Middlewares []Middleware
 	// StartComponentsOptions are the options to start the components.
 	StartComponentsOptions []StartComponentsOption
 	// CORSOptions are the options for CORS.
 	CORSOptions *gateway.CORSOptions
-	// Headers matchers
-	IncomingHeadersMatchers []gwruntime.HeaderMatcherFunc
-	OutgoingHeadersMatchers []gwruntime.HeaderMatcherFunc
-	// AuthenticationExceptions is a list of paths that should not be authenticated
+	// Header matchers.
+	IncomingHeaderMatchers []gwruntime.HeaderMatcherFunc
+	OutgoingHeaderMatchers []gwruntime.HeaderMatcherFunc
+	// AuthenticationExceptions is a list of paths that should not be authenticated.
 	AuthenticationExceptions []string
 }
 
@@ -84,9 +86,9 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 		&gateway.RegisterServicesOptions{
 			MuxOpts: []gwruntime.ServeMuxOption{
 				gwruntime.WithIncomingHeaderMatcher(
-					gateway.GetIncomingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultIncomingHeaderMatcher}, s.Options.IncomingHeadersMatchers...)...)),
+					gateway.GetIncomingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultIncomingHeaderMatcher}, s.Options.IncomingHeaderMatchers...)...)),
 				gwruntime.WithOutgoingHeaderMatcher(
-					gateway.GetOutgoingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultOutgoingHeaderMatcher}, s.Options.OutgoingHeadersMatchers...)...)),
+					gateway.GetOutgoingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultOutgoingHeaderMatcher}, s.Options.OutgoingHeaderMatchers...)...)),
 			},
 			TLSDir: s.Config.GRPC.TLSDir,
 		},
@@ -96,12 +98,15 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	}
 
 	s.Logger.Info("Using middleware:")
-	for _, middleware := range append([]Middleware{
-		gateway.WithRequestLogger(s.Logger),
-		gateway.WithCORSEnabled(s.Options.CORSOptions),
-		gateway.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token),
-		gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions)},
-		s.Options.Middlewares...) {
+	for _, middleware := range append(
+		append([]Middleware{}, s.Options.PreMiddlewares...),
+		append([]Middleware{
+			gateway.WithRequestLogger(s.Logger),
+			gateway.WithCORSEnabled(s.Options.CORSOptions),
+			gateway.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token),
+			gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions)},
+			s.Options.Middlewares...)...,
+	) {
 		mux = middleware(mux)
 		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(middleware).Pointer()).Name())
 	}

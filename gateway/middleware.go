@@ -39,7 +39,7 @@ func GetIncomingHeaderMatcherFunc(fns ...gwruntime.HeaderMatcherFunc) gwruntime.
 			}
 		}
 
-		return DefaultIncomingHeaderMatcher(key)
+		return runtime.DefaultHeaderMatcher(key)
 	}
 }
 

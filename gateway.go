@@ -13,6 +13,7 @@ import (
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
 	"github.com/foundation-go/foundation/gateway"
+	fhydra "github.com/foundation-go/foundation/hydra"
 )
 
 const (
@@ -40,21 +41,22 @@ type GatewayOptions struct {
 	Services []*gateway.Service
 	// Timeout for downstream services requests (default: 30 seconds, if constructed with `NewGatewayOptions`)
 	Timeout time.Duration
-	// AuthenticationDetailsMiddleware is a middleware that populates the request context with authentication details.
-	AuthenticationDetailsMiddleware func(http.Handler) http.Handler
-	// WithAuthentication enables authentication for the gateway.
-	WithAuthentication bool
-	// AuthenticationExcept is a list of paths that should not be authenticated.
-	AuthenticationExcept []string
-	// Middleware is a list of middleware to apply to the gateway. The middleware is applied in the order it is defined.
-	Middleware []func(http.Handler) http.Handler
+	// PreMiddlewares is a list of middlewares to apply before proceeding request further (fx captcha).
+	PreMiddlewares []Middleware
+	// Middlewares is a list of middlewares to apply to the gateway. The middleware is applied in the order it is defined.
+	Middlewares []Middleware
 	// StartComponentsOptions are the options to start the components.
 	StartComponentsOptions []StartComponentsOption
 	// CORSOptions are the options for CORS.
 	CORSOptions *gateway.CORSOptions
-	// Custom headers matchers
-	CustomHeadersMatchers []gwruntime.HeaderMatcherFunc
+	// Header matchers.
+	IncomingHeaderMatchers []gwruntime.HeaderMatcherFunc
+	OutgoingHeaderMatchers []gwruntime.HeaderMatcherFunc
+	// AuthenticationExceptions is a list of paths that should not be authenticated.
+	AuthenticationExceptions []string
 }
+
+type Middleware func(http.Handler) http.Handler
 
 // NewGatewayOptions returns a new GatewayOptions with default values.
 func NewGatewayOptions() *GatewayOptions {
@@ -79,35 +81,45 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	gwruntime.DefaultContextTimeout = s.Options.Timeout
 	s.Logger.Debugf("Downstream requests timeout: %s", s.Options.Timeout)
 
-	var muxOpts = []gwruntime.ServeMuxOption{
-		gwruntime.WithIncomingHeaderMatcher(gateway.IncomingHeaderMatcher),
-		gwruntime.WithOutgoingHeaderMatcher(gateway.OutgoingHeaderMatcher),
-	}
-
-	if len(s.Options.CustomHeadersMatchers) != 0 {
-		muxOpts = []gwruntime.ServeMuxOption{
-			gwruntime.WithIncomingHeaderMatcher(
-				gateway.GetIncomingHeaderMatcherFunc(s.Options.CustomHeadersMatchers...)),
-			gwruntime.WithOutgoingHeaderMatcher(
-				gateway.GetOutgoingHeaderMatcherFunc(s.Options.CustomHeadersMatchers...)),
-		}
-	}
-
 	mux, err := gateway.RegisterServices(
 		s.Options.Services,
 		&gateway.RegisterServicesOptions{
-			MuxOpts: muxOpts,
-			TLSDir:  s.Config.GRPC.TLSDir,
+			MuxOpts: []gwruntime.ServeMuxOption{
+				gwruntime.WithIncomingHeaderMatcher(
+					gateway.GetIncomingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultIncomingHeaderMatcher}, s.Options.IncomingHeaderMatchers...)...)),
+				gwruntime.WithOutgoingHeaderMatcher(
+					gateway.GetOutgoingHeaderMatcherFunc(append([]gwruntime.HeaderMatcherFunc{gateway.DefaultOutgoingHeaderMatcher}, s.Options.OutgoingHeaderMatchers...)...)),
+			},
+			TLSDir: s.Config.GRPC.TLSDir,
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to register services: %w", err)
 	}
 
+	var mws = append(
+		append([]Middleware{},
+			s.Options.PreMiddlewares...,
+		), append([]Middleware{
+			gateway.WithRequestLogger(s.Logger),
+			gateway.WithCORSEnabled(s.Options.CORSOptions),
+			gateway.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token),
+			gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions),
+		},
+			s.Options.Middlewares...,
+		)...)
+
+	s.Logger.Info("Using middlewares:")
+
+	for i := len(mws) - 1; i >= 0; i-- {
+		mux = mws[i](mux)
+		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(mws[i]).Pointer()).Name())
+	}
+
 	port := GetEnvOrInt("PORT", 51051)
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: s.applyMiddleware(mux, s.Options),
+		Handler: mux,
 	}
 
 	s.Logger.Infof("Listening on http://0.0.0.0:%d", port)
@@ -129,42 +141,4 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (s *Service) applyMiddleware(mux http.Handler, opts *GatewayOptions) http.Handler {
-	var middleware []func(http.Handler) http.Handler
-
-	// General middleware
-	middleware = append(middleware, gateway.WithRequestLogger(s.Logger), gateway.WithCORSEnabled(opts.CORSOptions))
-
-	// Authentication details middleware
-	if opts.AuthenticationDetailsMiddleware != nil {
-		middleware = append(middleware, opts.AuthenticationDetailsMiddleware)
-	}
-
-	// Authentication middleware
-	if opts.WithAuthentication {
-		middleware = append(middleware, gateway.WithAuthentication(opts.AuthenticationExcept))
-	}
-
-	// Custom middleware
-	middleware = append(middleware, opts.Middleware...)
-
-	// Log middleware chain
-	s.logMiddlewareChain(middleware)
-
-	// Apply middleware in reverse order, so the order they are defined is the order they are applied
-	for i := len(middleware) - 1; i >= 0; i-- {
-		mux = middleware[i](mux)
-	}
-
-	return mux
-}
-
-func (s *Service) logMiddlewareChain(middleware []func(http.Handler) http.Handler) {
-	s.Logger.Info("Using middleware:")
-
-	for _, m := range middleware {
-		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(m).Pointer()).Name())
-	}
 }

@@ -1,29 +1,34 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	fhttp "github.com/foundation-go/foundation/http"
+	fhydra "github.com/foundation-go/foundation/hydra"
+
+	hydra "github.com/ory/hydra-client-go/v2"
 )
 
-func TestWithAuthenticationDetails(t *testing.T) {
+func TestWithAuthenticationFn(t *testing.T) {
 	// Create a mock authentication handler
-	mockAuthHandler := func(token string) (*AuthenticationResult, error) {
+	authentication := func(_ context.Context, token string) (fhydra.Response, error) {
 		switch token {
 		case "valid_token":
-			return &AuthenticationResult{IsAuthenticated: true, UserID: "user_id"}, nil
+			sub := "user_id"
+			return &hydra.IntrospectedOAuth2Token{Active: true, Sub: &sub}, nil
 		case "invalid_token":
-			return &AuthenticationResult{IsAuthenticated: false, UserID: ""}, nil
+			return &hydra.IntrospectedOAuth2Token{Active: false, Sub: nil}, nil
 		default:
 			return nil, errors.New("server error")
 		}
 	}
 
 	// Create a mock handler
-	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		xAuthenticated := ""
 		xUserID := ""
 
@@ -48,40 +53,41 @@ func TestWithAuthenticationDetails(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	//
-	// Test valid token
-	//
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(fhttp.HeaderAuthorization, "valid_token")
+	for _, tc := range []struct {
+		name                         string
+		token                        string
+		expectedXAuthenticatedHeader string
+		expectedStatus               int
+	}{
+		{
+			name:           "Valid token",
+			token:          "valid_token",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid token",
+			token:          "invalid_token",
+			expectedStatus: http.StatusUnauthorized,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set(fhttp.HeaderAuthorization, tc.token)
 
-	// Create a recorder to capture the response
-	recorder := httptest.NewRecorder()
+			recorder := httptest.NewRecorder()
 
-	// Call the middleware with the mock handler and authentication handler
-	WithAuthenticationDetails(mockHandler, mockAuthHandler).ServeHTTP(recorder, req)
+			// Call the middleware with the mock handler and authentication handler
+			WithAuthenticationFn(authentication)(handler).ServeHTTP(recorder, req)
 
-	// Check that the response code is OK
-	if recorder.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, but got %d", http.StatusOK, recorder.Code)
-	}
-
-	//
-	// Test invalid token
-	//
-	recorder = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(fhttp.HeaderAuthorization, "invalid_token")
-
-	// Call the middleware with the mock handler and authentication handler
-	WithAuthenticationDetails(mockHandler, mockAuthHandler).ServeHTTP(recorder, req)
-
-	// Check that the response code is Internal Server Error
-	if recorder.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, but got %d", http.StatusInternalServerError, recorder.Code)
+			// Check the response code
+			if recorder.Code != tc.expectedStatus {
+				t.Errorf("Expected status code %d, but got %d", tc.expectedStatus, recorder.Code)
+			}
+		})
 	}
 }
 
-func TestWithAuthentication(t *testing.T) {
+func TestWithAuthenticationExceptions(t *testing.T) {
 	// Create a mock handler
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Write a response
@@ -94,7 +100,7 @@ func TestWithAuthentication(t *testing.T) {
 	// Test with authenticated request
 	req.Header.Set(fhttp.HeaderXAuthenticated, "true")
 	recorder := httptest.NewRecorder()
-	WithAuthentication([]string{})(mockHandler).ServeHTTP(recorder, req)
+	WithAuthenticationExceptions([]string{})(mockHandler).ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, but got %d", http.StatusOK, recorder.Code)
 	}
@@ -102,7 +108,7 @@ func TestWithAuthentication(t *testing.T) {
 	// Test with unauthenticated request
 	req.Header.Del(fhttp.HeaderXAuthenticated)
 	recorder = httptest.NewRecorder()
-	WithAuthentication([]string{})(mockHandler).ServeHTTP(recorder, req)
+	WithAuthenticationExceptions([]string{})(mockHandler).ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status code %d, but got %d", http.StatusUnauthorized, recorder.Code)
 	}
@@ -110,7 +116,7 @@ func TestWithAuthentication(t *testing.T) {
 	// Test `except` option
 	req.URL.Path = "/signup"
 	recorder = httptest.NewRecorder()
-	WithAuthentication([]string{"/signup"})(mockHandler).ServeHTTP(recorder, req)
+	WithAuthenticationExceptions([]string{"/signup"})(mockHandler).ServeHTTP(recorder, req)
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, but got %d", http.StatusOK, recorder.Code)
 	}

@@ -13,9 +13,9 @@ func HydraAuthenticationFunc(ctx context.Context, accessToken string) (userID st
 		return "", err
 	}
 
-	if !result.Active {
+	if !result.GetActive() {
 		return "", errors.New("token is not active")
 	}
 
-	return *result.Sub, nil
+	return result.GetSub(), nil
 }

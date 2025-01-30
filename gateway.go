@@ -97,18 +97,23 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 		return fmt.Errorf("failed to register services: %w", err)
 	}
 
-	s.Logger.Info("Using middleware:")
-	for _, middleware := range append(
-		append([]Middleware{}, s.Options.PreMiddlewares...),
-		append([]Middleware{
+	var mws = append(
+		append([]Middleware{},
+			s.Options.PreMiddlewares...,
+		), append([]Middleware{
 			gateway.WithRequestLogger(s.Logger),
 			gateway.WithCORSEnabled(s.Options.CORSOptions),
 			gateway.WithAuthenticationFn(fhydra.IntrospectedOAuth2Token),
-			gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions)},
-			s.Options.Middlewares...)...,
-	) {
-		mux = middleware(mux)
-		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(middleware).Pointer()).Name())
+			gateway.WithAuthenticationExceptions(s.Options.AuthenticationExceptions),
+		},
+			s.Options.Middlewares...,
+		)...)
+
+	s.Logger.Info("Using middlewares:")
+
+	for i := len(mws) - 1; i >= 0; i-- {
+		mux = mws[i](mux)
+		s.Logger.Infof(" - %s", runtime.FuncForPC(reflect.ValueOf(mws[i]).Pointer()).Name())
 	}
 
 	port := GetEnvOrInt("PORT", 51051)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -268,5 +269,20 @@ func ProtoToTopic(msg proto.Message) string {
 }
 
 func ProtoToName(msg proto.Message) string {
-	return string(msg.ProtoReflect().Descriptor().FullName())
+	name := string(msg.ProtoReflect().Descriptor().FullName())
+
+	separator := "."
+	if os.Getenv("KAFKA_TOPIC_NAME_SEPARATOR") != "" {
+		separator = os.Getenv("KAFKA_TOPIC_NAME_SEPARATOR")
+	}
+
+	if os.Getenv("KAFKA_TOPIC_PREFIX") != "" {
+		name = os.Getenv("KAFKA_TOPIC_PREFIX") + separator + name
+	}
+
+	if os.Getenv("KAFKA_TOPIC_SUFFIX") != "" {
+		name = name + separator + os.Getenv("KAFKA_TOPIC_SUFFIX")
+	}
+
+	return name
 }

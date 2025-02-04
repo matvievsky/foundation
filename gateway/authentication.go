@@ -20,6 +20,7 @@ func WithAuthenticationFn(fn Authenticate) func(http.Handler) http.Handler {
 			// Get the token from the request header
 			token := r.Header.Get(fhttp.HeaderAuthorization)
 			if token == "" {
+				r.Header.Del(fhttp.HeaderXUserID)
 				handler.ServeHTTP(w, r)
 				return
 			}

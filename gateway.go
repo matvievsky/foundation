@@ -11,6 +11,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/foundation-go/foundation/gateway"
 )
@@ -52,6 +53,8 @@ type GatewayOptions struct {
 	StartComponentsOptions []StartComponentsOption
 	// CORSOptions are the options for CORS.
 	CORSOptions *gateway.CORSOptions
+	// MarshalOptions are the options for the JSONPb marshaler.
+	MarshalOptions protojson.MarshalOptions
 }
 
 // NewGatewayOptions returns a new GatewayOptions with default values.
@@ -77,12 +80,18 @@ func (s *Gateway) ServiceFunc(ctx context.Context) error {
 	gwruntime.DefaultContextTimeout = s.Options.Timeout
 	s.Logger.Debugf("Downstream requests timeout: %s", s.Options.Timeout)
 
+	tracingShutdown := s.initTracing()
+	defer tracingShutdown()
+
 	mux, err := gateway.RegisterServices(
 		s.Options.Services,
 		&gateway.RegisterServicesOptions{
 			MuxOpts: []gwruntime.ServeMuxOption{
 				gwruntime.WithIncomingHeaderMatcher(gateway.IncomingHeaderMatcher),
 				gwruntime.WithOutgoingHeaderMatcher(gateway.OutgoingHeaderMatcher),
+				gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, &gwruntime.JSONPb{
+					MarshalOptions: s.Options.MarshalOptions,
+				}),
 			},
 			TLSDir: s.Config.GRPC.TLSDir,
 		},

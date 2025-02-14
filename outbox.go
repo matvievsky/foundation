@@ -50,6 +50,14 @@ func NewEventFromProto(msg proto.Message, key string, headers map[string]string)
 	// Construct topic name from proto name
 	topic := ProtoNameToTopic(protoName)
 
+	if os.Getenv("KAFKA_TOPIC_PREFIX") != "" {
+		topic = os.Getenv("KAFKA_TOPIC_PREFIX") + "." + topic
+	}
+
+	if os.Getenv("KAFKA_TOPIC_SUFFIX") != "" {
+		topic = topic + "." + os.Getenv("KAFKA_TOPIC_SUFFIX")
+	}
+
 	if headers == nil {
 		headers = make(map[string]string)
 	}

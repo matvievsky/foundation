@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -100,7 +101,17 @@ func (opts *EventsWorkerOptions) ProtoNamesToMessages() map[string]proto.Message
 	protoNamesToMessages := make(map[string]proto.Message)
 
 	for msg := range opts.Handlers {
-		protoNamesToMessages[ProtoToName(msg)] = msg
+		name := ProtoToName(msg)
+
+		if os.Getenv("KAFKA_TOPIC_PREFIX") != "" {
+			name = strings.TrimPrefix(name, os.Getenv("KAFKA_TOPIC_PREFIX")+".")
+		}
+
+		if os.Getenv("KAFKA_TOPIC_SUFFIX") != "" {
+			name = strings.TrimSuffix(name, os.Getenv("KAFKA_TOPIC_SUFFIX")+".")
+		}
+
+		protoNamesToMessages[name] = msg
 	}
 
 	return protoNamesToMessages

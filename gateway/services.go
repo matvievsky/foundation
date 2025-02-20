@@ -22,6 +22,11 @@ type Service struct {
 
 	// Function to register the gRPC server endpoint
 	Register func(context.Context, *runtime.ServeMux, string, []grpc.DialOption) error
+
+	// The maximum byte size of the message that we want to receive from the service. If set to 0, the rule is ignored.
+	MaxCallRecvMsgSize int
+	// The maximum byte size of the message that we want to send to the service. If set to 0, the rule is ignored.
+	MaxCallSendMsgSize int
 }
 
 type RegisterServicesOptions struct {
@@ -49,8 +54,6 @@ func RegisterServices(services []*Service, opts *RegisterServicesOptions) (http.
 		}
 	}
 
-	grpcOpts := []grpc.DialOption{grpc.WithTransportCredentials(connCreds)}
-
 	// Register gRPC server endpoints
 	for _, service := range services {
 		errPrefix := fmt.Sprintf("failed to register service `%s`", service.Name)
@@ -60,6 +63,21 @@ func RegisterServices(services []*Service, opts *RegisterServicesOptions) (http.
 		endpoint := os.Getenv(endpointVarName)
 		if endpoint == "" {
 			return nil, fmt.Errorf("%s: environment variable `%s` is not set", errPrefix, endpointVarName)
+		}
+
+		callOpts := make([]grpc.CallOption, 0)
+
+		if service.MaxCallRecvMsgSize != 0 {
+			callOpts = append(callOpts, grpc.MaxCallRecvMsgSize(service.MaxCallRecvMsgSize))
+		}
+
+		if service.MaxCallSendMsgSize != 0 {
+			callOpts = append(callOpts, grpc.MaxCallSendMsgSize(service.MaxCallSendMsgSize))
+		}
+
+		grpcOpts := []grpc.DialOption{
+			grpc.WithTransportCredentials(connCreds),
+			grpc.WithDefaultCallOptions(callOpts...),
 		}
 
 		if err := service.Register(ctx, mux, endpoint, grpcOpts); err != nil {

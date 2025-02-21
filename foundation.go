@@ -13,6 +13,7 @@ import (
 
 	fjobs "github.com/foundation-go/foundation/jobs"
 	fkafka "github.com/foundation-go/foundation/kafka"
+	"github.com/foundation-go/foundation/outboxrepo"
 	fpg "github.com/foundation-go/foundation/postgresql"
 	fredis "github.com/foundation-go/foundation/redis"
 	fsentry "github.com/foundation-go/foundation/sentry"
@@ -396,6 +397,13 @@ func (s *Service) Start(opts *StartOptions) {
 		err = fmt.Errorf("failed to start components: %w", err)
 		sentry.CaptureException(err)
 		s.Logger.Fatalf("Failed to start components: %v", err)
+	}
+
+	// Outbox
+	if s.Config.Outbox.Enabled {
+		if err := outboxrepo.CreateOutbox(s.GetPostgreSQL()); err != nil {
+			s.Logger.Fatalf("Failed to create outbox: %v", err)
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

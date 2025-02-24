@@ -59,7 +59,11 @@ func (s Oauth2Scopes) ContainsAny(scopes ...string) bool {
 
 // GetCorrelationID returns the correlation ID from the context.
 func GetCorrelationID(ctx context.Context) string {
-	return ctx.Value(CtxKeyCorrelationID).(string)
+	if correlationID, ok := ctx.Value(CtxKeyCorrelationID).(string); ok {
+		return correlationID
+	}
+
+	return ""
 }
 
 // WithCorrelationID sets the correlation ID to the context
